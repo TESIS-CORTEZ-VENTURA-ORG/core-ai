@@ -19,6 +19,9 @@ class ForecastRequest(BaseModel):
     horizon: int = Field(gt=0)
     history: list[HistoryPoint] = Field(min_length=2)
     season_length: int | None = None
+    # Engine to run: "auto" (best available, default), "statsforecast",
+    # "seasonalnaive", "timesfm" or "chronos". None -> service default.
+    engine: str | None = None
 
 
 class ForecastPoint(BaseModel):
@@ -37,6 +40,7 @@ class BacktestMetrics(BaseModel):
 
 class ForecastResponse(BaseModel):
     series_id: str
+    engine: str
     model: str
     baseline: str
     frequency: str

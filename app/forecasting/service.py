@@ -5,16 +5,19 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from app.config import get_settings
-from app.forecasting.engine import (
-    baseline_name,
-    model_name,
-    run_forecast,
-    run_seasonal_naive,
+from app.forecasting.engine import baseline_name, run_seasonal_naive
+from app.forecasting.engines import (
+    EngineNotAvailableError,
+    ForecastEngine,
+    resolve_engine,
 )
+from app.forecasting.engines.registry import UnknownEngineError
 from app.forecasting.schemas import (
     BacktestMetrics,
+    ForecastPoint,
     ForecastRequest,
     ForecastResponse,
+    HistoryPoint,
 )
 from app.metrics import smape
 
@@ -41,6 +44,11 @@ def forecast(request: ForecastRequest) -> ForecastResponse:
             ),
         )
 
+    try:
+        engine = resolve_engine(request.engine, settings.forecast_engine)
+    except UnknownEngineError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     history = sorted(request.history, key=lambda p: p.ds)
 
     # -----------------------------------------------------------------------
@@ -53,7 +61,8 @@ def forecast(request: ForecastRequest) -> ForecastResponse:
         train = history[:-holdout_size]
         test = history[-holdout_size:]
 
-        model_preds = run_forecast(
+        model_preds = _run_engine(
+            engine,
             train,
             request.frequency,
             holdout_size,
@@ -88,7 +97,8 @@ def forecast(request: ForecastRequest) -> ForecastResponse:
     # -----------------------------------------------------------------------
     # Full forecast on complete history
     # -----------------------------------------------------------------------
-    points = run_forecast(
+    points = _run_engine(
+        engine,
         history,
         request.frequency,
         request.horizon,
@@ -97,9 +107,24 @@ def forecast(request: ForecastRequest) -> ForecastResponse:
 
     return ForecastResponse(
         series_id=request.series_id,
-        model=model_name(),
+        engine=engine.key,
+        model=engine.model_name(),
         baseline=baseline_name(),
         frequency=request.frequency,
         points=points,
         backtest=backtest,
     )
+
+
+def _run_engine(
+    engine: ForecastEngine,
+    history: list[HistoryPoint],
+    frequency: str,
+    horizon: int,
+    season_length: int | None,
+) -> list[ForecastPoint]:
+    """Run an engine, mapping a missing/unimplemented model to HTTP 501."""
+    try:
+        return engine.forecast(history, frequency, horizon, season_length)
+    except (EngineNotAvailableError, NotImplementedError) as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc

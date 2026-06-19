@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     app_name: str = "core-ai"
     default_levels: list[int] = [80]
     forecast_max_horizon: int = 365
+    # Default forecasting engine when the request does not specify one.
+    # "auto" picks the best available model, degrading to the baseline.
+    forecast_engine: str = "auto"
 
 
 _settings: Settings | None = None
