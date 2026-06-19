@@ -16,6 +16,10 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY . .
 RUN uv sync --frozen --no-dev
 
+# Correr como usuario no-root (A3).
+RUN useradd --create-home --uid 1000 appuser && chown -R appuser /app
+USER appuser
+
 EXPOSE 8000
 
 # Liveness: el orquestador espera a que /health responda 200 antes de enrutar.
