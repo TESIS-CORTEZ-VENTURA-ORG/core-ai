@@ -17,13 +17,19 @@ from app.forecasting.schemas import ForecastPoint, HistoryPoint
 class StatsforecastEngine(ForecastEngine):
     key: ClassVar[str] = "statsforecast"
 
+    def __init__(self) -> None:
+        # Set during forecast() to the model actually used for the last series
+        # (AutoETS for long series, SeasonalNaive for short ones). A fresh engine
+        # is created per request, so this is request-scoped.
+        self._model_used: str | None = None
+
     @classmethod
     def is_available(cls) -> bool:
         # The numpy/pandas fallback guarantees this engine always runs.
         return True
 
     def model_name(self) -> str:
-        return _baseline.model_name()
+        return self._model_used or _baseline.model_name()
 
     def forecast(
         self,
@@ -32,4 +38,7 @@ class StatsforecastEngine(ForecastEngine):
         horizon: int,
         season_length: int | None,
     ) -> list[ForecastPoint]:
+        self._model_used = _baseline.resolve_model_name(
+            history, frequency, season_length
+        )
         return _baseline.run_forecast(history, frequency, horizon, season_length)

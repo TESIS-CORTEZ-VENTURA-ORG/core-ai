@@ -38,13 +38,34 @@ _LEVEL = 80  # prediction interval level (P10/P90)
 
 
 def model_name() -> str:
-    """Return the name of the primary model currently in use."""
+    """Return the name of the primary model when it is unknown for a request."""
     return _MODEL_NAME_STATSFORECAST if _STATSFORECAST_AVAILABLE else _MODEL_NAME_NUMPY
 
 
 def baseline_name() -> str:
     """Return the name of the baseline model."""
     return _BASELINE_NAME
+
+
+def resolve_model_name(
+    history: list[HistoryPoint],
+    frequency: str,
+    season_length: int | None,
+) -> str:
+    """Return the model that will ACTUALLY run for *this* series.
+
+    The statsforecast engine downgrades AutoETS -> SeasonalNaive when the series
+    is too short to estimate a seasonal model (len < 2 * season_length). This
+    mirrors that decision so the response reports the real model used instead of
+    a static label (otherwise a short series would be reported as "AutoETS" while
+    SeasonalNaive actually ran).
+    """
+    if not _STATSFORECAST_AVAILABLE:
+        return _MODEL_NAME_NUMPY
+    sl = season_length if season_length is not None else _DEFAULT_SEASON_LENGTH[frequency]
+    if len(history) >= 2 * sl:
+        return _MODEL_NAME_STATSFORECAST  # AutoETS
+    return _BASELINE_NAME  # SeasonalNaive used as primary fallback on short series
 
 
 # ---------------------------------------------------------------------------

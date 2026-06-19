@@ -66,6 +66,21 @@ class TestEngineSelection:
         assert body["model"] == "SeasonalNaive"
 
 
+class TestModelReportsRealModel:
+    """C2 — the reported `model` must reflect what actually ran, not a static label."""
+
+    def test_long_series_reports_primary_model(self):
+        # 60 points >= 2*7 → AutoETS runs (numpy fallback reports its own name).
+        data = client.post("/forecast/run", json=_payload(n=60, horizon=7)).json()
+        assert data["model"] in ("AutoETS", "SeasonalNaive-numpy")
+
+    def test_short_series_not_reported_as_autoets(self):
+        # 8 points < 2*7 → SeasonalNaive runs; the response must NOT claim AutoETS.
+        data = client.post("/forecast/run", json=_payload(n=8, horizon=2)).json()
+        assert data["engine"] == "statsforecast"
+        assert data["model"] != "AutoETS"
+
+
 class TestFutureEnginesWired:
     """TimesFM and Chronos are reachable but not yet implemented -> 501."""
 
