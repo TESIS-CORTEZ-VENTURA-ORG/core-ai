@@ -1,0 +1,17 @@
+# Artefactos que no deben entrar a la imagen (acelera el build y la mantiene chica).
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+tests/
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+.env
+.env.*
+*.md
+!README.md
