@@ -24,6 +24,6 @@ EXPOSE 8000
 
 # Liveness: el orquestador espera a que /health responda 200 antes de enrutar.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=5 \
-  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').getcode()==200 else 1)"
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:${PORT:-8000}/health').getcode()==200 else 1)"
 
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
