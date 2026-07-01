@@ -1,10 +1,11 @@
 """Mock LLM adapter — no API key required.
 
-Returns deterministic, valid read-only SQL for a small set of question
-patterns recognised by regex. This enables:
+Returns deterministic, valid responses for a small set of question patterns
+recognised by regex (nl2sql/answer) and fixed canned data for document
+extraction (extract). This enables:
   - CI tests with no external service and no cost.
   - A fully functional $0 demo of the end-to-end flow.
-  - Regression tests that fix exact SQL output.
+  - Regression tests that fix exact output.
 
 Every canned SQL query uses only tables in the NestJS analytics allowlist and
 includes a LIMIT clause. None of them reference blocked tables (users,
@@ -15,7 +16,7 @@ from __future__ import annotations
 
 import re
 
-from app.chat.adapters.base import LLMAdapter
+from app.chat.adapters.base import ExtractResult, LLMAdapter
 from app.chat.schemas import Nl2SqlRequest, Nl2SqlResponse
 
 # (compiled_regex, canned_sql) pairs — first match wins.
@@ -101,6 +102,35 @@ _FALLBACK_SQL = (
     "LIMIT 10"
 )
 
+# Deterministic canned extraction result for CI / no-key environments.
+# Mirrors a realistic Peruvian restaurant menu to make tests meaningful.
+_MOCK_EXTRACT_RESULT: ExtractResult = {
+    "menuItems": [
+        {
+            "name": "Lomo Saltado",
+            "price": 32.50,
+            "category": "Platos de fondo",
+            "description": "Carne de res salteada con verduras y papas fritas",
+        },
+        {
+            "name": "Ceviche Mixto",
+            "price": 28.00,
+            "category": "Entradas",
+            "description": None,
+        },
+        {
+            "name": "Inca Kola 500ml",
+            "price": 5.00,
+            "category": "Bebidas",
+            "description": None,
+        },
+    ],
+    "ingredients": [
+        {"name": "Carne de res", "unit": "kg", "estimatedCost": 32.00},
+        {"name": "Limón", "unit": "kg", "estimatedCost": 4.50},
+    ],
+}
+
 
 class MockAdapter(LLMAdapter):
     """Deterministic mock adapter — always available, no API key needed."""
@@ -142,3 +172,16 @@ class MockAdapter(LLMAdapter):
             return f"Resultado: {pairs}."
         top = rows[0][0] if rows[0] else "—"
         return f"Se encontraron {n} registro(s). Primer resultado destacado: {top}."
+
+    def extract(self, text: str, target: str, currency: str = "PEN") -> ExtractResult:
+        """Return deterministic canned extraction data — no LLM call, no API key needed.
+
+        The canned result is intentionally realistic (a Peruvian restaurant menu)
+        so that e2e tests against the mock can assert meaningful field values.
+        """
+        result: ExtractResult = {"menuItems": [], "ingredients": []}
+        if target in ("menu", "auto"):
+            result["menuItems"] = list(_MOCK_EXTRACT_RESULT["menuItems"])
+        if target in ("ingredients", "auto"):
+            result["ingredients"] = list(_MOCK_EXTRACT_RESULT["ingredients"])
+        return result

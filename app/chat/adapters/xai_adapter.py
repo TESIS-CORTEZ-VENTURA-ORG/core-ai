@@ -1,4 +1,4 @@
-"""xAI (Grok) LLM adapter for Text-to-SQL.
+"""xAI (Grok) LLM adapter for Text-to-SQL and document extraction.
 
 Requires XAI_API_KEY in the environment. xAI's API is OpenAI-compatible,
 so we reuse the openai Python SDK with a custom base_url. No separate SDK
@@ -9,14 +9,18 @@ Model is configurable via CORE_AI_CHAT_MODEL; defaults to grok-3-mini.
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 
-from app.chat.adapters.base import AdapterNotAvailableError, LLMAdapter
+from app.chat.adapters.base import AdapterNotAvailableError, ExtractResult, LLMAdapter
 from app.chat.prompt import build_answer_prompt, build_nl2sql_prompt
 from app.chat.schemas import Nl2SqlRequest, Nl2SqlResponse
+from app.extract.prompt import build_extract_prompt
 
 XAI_BASE_URL = "https://api.x.ai/v1"
 DEFAULT_MODEL = "grok-3-mini"
+logger = logging.getLogger(__name__)
 
 
 class XAIAdapter(LLMAdapter):
@@ -56,6 +60,35 @@ class XAIAdapter(LLMAdapter):
             temperature=0.3,
         )
         return (completion.choices[0].message.content or "").strip()
+
+    def extract(self, text: str, target: str, currency: str = "PEN") -> ExtractResult:
+        """Extract menu items and/or ingredients from restaurant document text.
+
+        Uses response_format=json_object (supported by xAI's OpenAI-compatible API)
+        to guarantee the model outputs valid JSON.
+        """
+        client = self._client()
+        system_prompt, user_prompt = build_extract_prompt(text, target, currency)
+        try:
+            completion = client.chat.completions.create(
+                model=self.model_name(),
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=2048,
+                temperature=0,
+                response_format={"type": "json_object"},
+            )
+            raw_text = (completion.choices[0].message.content or "").strip()
+            parsed = json.loads(raw_text)
+            return {
+                "menuItems": parsed.get("menuItems", []),
+                "ingredients": parsed.get("ingredients", []),
+            }
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            logger.warning("xAI extract: failed to parse response — %s", exc)
+            return {"menuItems": [], "ingredients": []}
 
     def _client(self):  # type: ignore[no-untyped-def]
         try:
