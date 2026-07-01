@@ -29,7 +29,7 @@ class AnthropicAdapter(LLMAdapter):
         return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
     def model_name(self) -> str:
-        return os.environ.get("CORE_AI_CHAT_MODEL", DEFAULT_MODEL)
+        return os.environ.get("CORE_AI_CHAT_MODEL") or DEFAULT_MODEL
 
     def nl2sql(self, request: Nl2SqlRequest) -> Nl2SqlResponse:
         client = self._client()
