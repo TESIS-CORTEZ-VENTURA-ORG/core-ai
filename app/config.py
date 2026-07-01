@@ -13,6 +13,14 @@ class Settings(BaseSettings):
     # "auto" picks the best available model, degrading to the baseline.
     forecast_engine: str = "auto"
 
+    # E09 — Chat / Text-to-SQL configuration.
+    # Provider: "openai" | "anthropic" | "xai" | "mock".
+    # Empty string triggers auto-select (first key present → mock).
+    chat_provider: str = ""
+    # Model override for the active chat provider (e.g. "gpt-4o", "claude-sonnet-4-6").
+    # Empty string means each adapter uses its own default.
+    chat_model: str = ""
+
 
 _settings: Settings | None = None
 

@@ -10,6 +10,9 @@ dependencies = [
     "pydantic-settings>=2.3.0",
     "statsforecast>=2.0.0",
     "utilsforecast>=0.2.0",
+    # E09: Text-to-SQL LLM adapters (openai SDK also used for xAI via base_url).
+    "openai>=1.0.0",
+    "anthropic>=0.25.0",
     # declared but not actively used in this increment
     "langchain>=1.0.0",
     "langgraph>=0.3.0",
