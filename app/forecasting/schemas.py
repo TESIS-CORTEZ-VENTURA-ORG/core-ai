@@ -56,7 +56,7 @@ class Driver(BaseModel):
     "Fiestas Patrias en 12 días: +35% demanda proyectada"."""
 
     date: date
-    kind: Literal["holiday", "gastro_event", "weather", "weekend"]
+    kind: Literal["holiday", "gastro_event", "weather", "weekend", "payday"]
     label: str
     # Historical uplift for this factor vs. equivalent non-event days, ONLY
     # when the submitted history actually has evidence for it. Omitted (None)

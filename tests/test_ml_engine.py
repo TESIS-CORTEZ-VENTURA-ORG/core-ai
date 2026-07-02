@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from app.forecasting.engines.base import EngineNotAvailableError
 from app.forecasting.engines.ml_engine import MLEngine
+from app.forecasting.features.calendar import build_date_features
 from app.forecasting.features.weather import WeatherClient
 from app.forecasting.schemas import ForecastRequest, HistoryPoint
 from app.forecasting.service import forecast
@@ -51,6 +52,25 @@ def _spiked_daily_series(
         d = start + timedelta(days=i)
         y = 50.0 + _WEEKLY_SEASON[i % 7]
         if d.month == 7 and d.day in (28, 29):
+            y *= spike_multiplier
+        series.append(HistoryPoint(ds=d, y=round(y, 2)))
+    return series
+
+
+def _payday_spiked_daily_series(
+    start: date, end: date, spike_multiplier: float = 1.6
+) -> list[HistoryPoint]:
+    """Weekly-seasonal series with a deterministic spike on every payday
+    window day (quincena/fin-de-mes +-1, see features/calendar.py) — a
+    twice-a-month pattern a fixed weekly lag cannot anticipate, but the
+    `is_payday_window` calendar feature can.
+    """
+    dates = [start + timedelta(days=i) for i in range((end - start).days + 1)]
+    payday_flags = build_date_features(dates)
+    series: list[HistoryPoint] = []
+    for i, d in enumerate(dates):
+        y = 50.0 + _WEEKLY_SEASON[i % 7]
+        if payday_flags[d].is_payday_window:
             y *= spike_multiplier
         series.append(HistoryPoint(ds=d, y=round(y, 2)))
     return series
@@ -205,3 +225,46 @@ class TestBacktestBeatsNaiveWithContext:
         bt = self.response.backtest
         assert bt.model_smape_no_context is not None
         assert bt.model_smape < bt.model_smape_no_context
+
+
+class TestBacktestBeatsNaiveWithPaydayContext:
+    """Same thesis claim as `TestBacktestBeatsNaiveWithContext` but for the
+    payday (quincena/fin-de-mes) signal instead of a yearly holiday: a
+    twice-a-month spike a fixed weekly lag cannot see coming, which
+    `is_payday_window` should let the ML engine anticipate.
+    """
+
+    def setup_method(self):
+        # ~2.5 years of daily history -> dozens of payday-window occurrences
+        # in training; the 14-day holdout (ending 2025-08-04) covers at least
+        # one quincena/fin-de-mes window.
+        history = _payday_spiked_daily_series(date(2023, 1, 1), date(2025, 8, 4))
+        self.request = ForecastRequest(
+            series_id="spiked-payday-series",
+            frequency="D",
+            horizon=14,
+            history=history,
+            engine="ml",
+            use_context=True,
+        )
+        self.response = forecast(self.request, weather_client=_mock_weather_client())
+
+    def test_context_status_is_full(self):
+        assert self.response.context_status == "full"
+
+    def test_backtest_is_present(self):
+        assert self.response.backtest is not None
+
+    def test_context_model_beats_seasonal_naive(self):
+        bt = self.response.backtest
+        assert bt.model_smape < bt.baseline_smape
+        assert bt.improvement_pct > 0
+
+    def test_context_model_beats_its_own_context_free_run(self):
+        bt = self.response.backtest
+        assert bt.model_smape_no_context is not None
+        assert bt.model_smape < bt.model_smape_no_context
+
+    def test_payday_driver_present_in_response(self):
+        kinds = {d.kind for d in self.response.drivers}
+        assert "payday" in kinds

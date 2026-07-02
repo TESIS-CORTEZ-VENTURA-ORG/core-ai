@@ -271,6 +271,15 @@ def _build_training_frame(
                 else _NO_EVENT_SENTINEL_DAYS
             )
         )
+        # Payday signal (quincena/fin-de-mes +-1 day, see features/calendar.py)
+        # — plain 0/1 flag, same treatment as is_holiday/is_weekend above.
+        df["is_payday_window"] = df["ds"].map(
+            lambda d: (
+                int(context.date_features[d].is_payday_window)
+                if d in context.date_features
+                else 0
+            )
+        )
         if context.weather_by_date:
             # `pd.to_numeric` forces a proper float64 column (NaN, not the
             # `None` produced by `.map`), so `.fillna()` below doesn't hit
@@ -336,6 +345,7 @@ def _build_prediction_row(
             if feat is not None and feat.days_to_next_event is not None
             else _NO_EVENT_SENTINEL_DAYS
         )
+        row["is_payday_window"] = int(feat.is_payday_window) if feat is not None else 0
         if context.weather_by_date:
             temp = _weather_field(context.weather_by_date, target_date, "temp_max_c")
             precip = _weather_field(context.weather_by_date, target_date, "precip_mm")

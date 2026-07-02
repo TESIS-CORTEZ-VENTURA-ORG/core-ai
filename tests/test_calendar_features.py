@@ -110,3 +110,91 @@ class TestWeekendAndLookahead:
         dates = [start + timedelta(days=i) for i in range(365)]
         feats = build_date_features(dates)
         assert all(f.days_to_next_event is not None for f in feats.values())
+
+
+class TestPaydayWindow:
+    """Payday (quincena/fin-de-mes) +-1 day window — see calendar.py's
+    `_payday_windows_for_years` docstring for the documented simplification
+    (literal 15th / last calendar day, no Sunday-payday adjustment)."""
+
+    def test_the_15th_is_quincena(self):
+        d = date(2026, 3, 15)
+        feats = build_date_features([d])
+        feat = feats[d]
+        assert feat.is_payday_window is True
+        assert feat.payday_anchor == d
+        assert feat.payday_label == "Quincena"
+
+    def test_day_before_and_after_the_15th_share_the_same_anchor(self):
+        anchor = date(2026, 3, 15)
+        before, after = anchor - timedelta(days=1), anchor + timedelta(days=1)
+        feats = build_date_features([before, after])
+        assert feats[before].is_payday_window is True
+        assert feats[before].payday_anchor == anchor
+        assert feats[after].is_payday_window is True
+        assert feats[after].payday_anchor == anchor
+
+    def test_two_days_before_and_after_the_15th_are_outside_the_window(self):
+        anchor = date(2026, 3, 15)
+        outside = [anchor - timedelta(days=2), anchor + timedelta(days=2)]
+        feats = build_date_features(outside)
+        assert all(not feats[d].is_payday_window for d in outside)
+        assert all(feats[d].payday_anchor is None for d in outside)
+        assert all(feats[d].payday_label is None for d in outside)
+
+    def test_last_day_of_a_31_day_month_is_fin_de_mes(self):
+        d = date(2026, 3, 31)
+        feats = build_date_features([d])
+        feat = feats[d]
+        assert feat.is_payday_window is True
+        assert feat.payday_anchor == d
+        assert feat.payday_label == "Fin de mes"
+
+    def test_last_day_of_february_is_fin_de_mes(self):
+        # Feb 2026 is not a leap year -> last day is the 28th.
+        d = date(2026, 2, 28)
+        feats = build_date_features([d])
+        assert feats[d].payday_label == "Fin de mes"
+        assert feats[d].payday_anchor == d
+
+    def test_fin_de_mes_window_spills_into_next_month(self):
+        # Last day of Feb 2026 (28th) -> window is Feb 27, Feb 28, Mar 1.
+        anchor = date(2026, 2, 28)
+        spillover = date(2026, 3, 1)
+        feats = build_date_features([spillover])
+        assert feats[spillover].is_payday_window is True
+        assert feats[spillover].payday_anchor == anchor
+        assert feats[spillover].payday_label == "Fin de mes"
+
+    def test_fin_de_mes_window_spills_across_a_year_boundary(self):
+        # Dec 31, 2025 (last day of Dec) -> window includes Jan 1, 2026, even
+        # though 2025 isn't in the requested `dates`' own year range.
+        jan_first = date(2026, 1, 1)
+        feats = build_date_features([jan_first])
+        feat = feats[jan_first]
+        assert feat.is_payday_window is True
+        assert feat.payday_anchor == date(2025, 12, 31)
+        assert feat.payday_label == "Fin de mes"
+
+    def test_payday_window_coexists_with_a_gastro_event(self):
+        # Dec 31 is both "Nochevieja" (gastro_event) AND fin-de-mes — the two
+        # signals are independent and must both be present.
+        d = date(2026, 12, 31)
+        feats = build_date_features([d])
+        feat = feats[d]
+        assert feat.event_name == "Nochevieja"
+        assert feat.is_payday_window is True
+        assert feat.payday_label == "Fin de mes"
+
+    def test_quincena_and_fin_de_mes_windows_never_overlap(self):
+        # Every day of a full year resolves to at most one payday anchor —
+        # regression guard for the "windows collide" risk called out in
+        # `_merge_payday_window`'s docstring.
+        start = date(2026, 1, 1)
+        dates = [start + timedelta(days=i) for i in range(365)]
+        feats = build_date_features(dates)
+        for d in dates:
+            feat = feats[d]
+            if feat.is_payday_window:
+                assert feat.payday_anchor is not None
+                assert feat.payday_label in ("Quincena", "Fin de mes")

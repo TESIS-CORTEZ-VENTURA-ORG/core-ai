@@ -40,6 +40,10 @@ def build_drivers(
     """
     history_by_date = {p.ds: p.y for p in history}
     drivers: list[Driver] = []
+    # A payday window spans 3 dates (anchor +-1) that all share the same
+    # `payday_anchor`; without this set we'd emit up to 3 "Quincena" chips
+    # for a single payday instead of one (see ticket "no 3 chips (+-1)").
+    seen_payday_anchors: set[date] = set()
 
     for point in forecast_points:
         d = point.target_date
@@ -65,6 +69,27 @@ def build_drivers(
             impact = _historical_weekend_uplift(history_by_date, context.date_features)
             drivers.append(
                 Driver(date=d, kind="weekend", label="Fin de semana", impact_pct=impact)
+            )
+
+        # Independent of the calendar-event/weekend chip above (a payday can
+        # coexist with a gastro event, e.g. Dec 31 is both "Nochevieja" and
+        # fin-de-mes) — mirrors how the weather driver below is independent.
+        if (
+            feat is not None
+            and feat.is_payday_window
+            and feat.payday_anchor is not None
+            and feat.payday_label is not None
+            and feat.payday_anchor not in seen_payday_anchors
+        ):
+            seen_payday_anchors.add(feat.payday_anchor)
+            impact = _historical_payday_uplift(history_by_date, context.date_features)
+            drivers.append(
+                Driver(
+                    date=feat.payday_anchor,
+                    kind="payday",
+                    label=feat.payday_label,
+                    impact_pct=impact,
+                )
             )
 
         weather = context.weather_by_date.get(d)
@@ -136,6 +161,39 @@ def _historical_weekend_uplift(
     if weekday_avg == 0:
         return None
     return round((weekend_avg - weekday_avg) / weekday_avg * 100.0, 2)
+
+
+def _historical_payday_uplift(
+    history_by_date: dict[date, float],
+    date_features: dict[date, DateFeatures],
+) -> float | None:
+    """Average % difference between payday-window and ordinary-day history.
+
+    Mirrors `_historical_weekend_uplift`: buckets ALL days flagged
+    `is_payday_window` (both quincena and fin-de-mes windows pooled
+    together — this is a single "payday" driver kind, not one per payday
+    type) against every other day that isn't itself a payday window or a
+    named calendar event, so the baseline is genuinely "an ordinary day".
+    Returns None (never fabricated) when there isn't enough history to
+    compare either bucket.
+    """
+    payday_values = [
+        history_by_date[d]
+        for d, f in date_features.items()
+        if f.is_payday_window and d in history_by_date
+    ]
+    ordinary_values = [
+        history_by_date[d]
+        for d, f in date_features.items()
+        if not f.is_payday_window and f.event_name is None and d in history_by_date
+    ]
+    if not payday_values or not ordinary_values:
+        return None
+    payday_avg = sum(payday_values) / len(payday_values)
+    ordinary_avg = sum(ordinary_values) / len(ordinary_values)
+    if ordinary_avg == 0:
+        return None
+    return round((payday_avg - ordinary_avg) / ordinary_avg * 100.0, 2)
 
 
 def _equivalent_days_average(
