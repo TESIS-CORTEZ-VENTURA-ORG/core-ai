@@ -12,9 +12,11 @@ from app.forecasting.engines.registry import (
     list_engine_keys,
     resolve_engine,
 )
+from app.forecasting.features.context import ForecastContext
 
 __all__ = [
     "EngineNotAvailableError",
+    "ForecastContext",
     "ForecastEngine",
     "available_engines",
     "list_engine_keys",

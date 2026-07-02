@@ -19,12 +19,17 @@ dependencies = [
     "langsmith>=0.2.0",
     "qdrant-client>=1.9.0",
     "redis>=5.0.0",
+    # HU-08-07: exogenous context for the "ml" forecast engine (see
+    # app/forecasting/features/ and app/forecasting/engines/ml_engine.py).
+    "holidays>=0.99", # Peruvian official holidays (holidays.PE)
+    "lightgbm>=4.6.0", # ML engine model — needs libgomp1 in Docker, see Dockerfile
+    "scikit-learn>=1.9.0", # required by lightgbm.sklearn.LGBMRegressor
+    "httpx>=0.28.1", # Open-Meteo client (also used by fastapi.testclient in tests)
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
-    "httpx>=0.27.0",
 ]
 # Heavy forecasting models are wired behind the ForecastEngine contract but kept
 # out of the default install so the service stays light. Add when implementing

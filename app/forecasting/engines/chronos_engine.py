@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 from app.forecasting.engines.base import EngineNotAvailableError, ForecastEngine
+from app.forecasting.features.context import ForecastContext
 from app.forecasting.schemas import ForecastPoint, HistoryPoint
 
 _INSTALL_HINT = (
@@ -39,6 +40,7 @@ class ChronosEngine(ForecastEngine):
         frequency: str,
         horizon: int,
         season_length: int | None,
+        context: ForecastContext | None = None,
     ) -> list[ForecastPoint]:
         if not self.is_available():
             raise EngineNotAvailableError(_INSTALL_HINT)

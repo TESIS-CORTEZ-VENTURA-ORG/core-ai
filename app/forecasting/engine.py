@@ -62,7 +62,11 @@ def resolve_model_name(
     """
     if not _STATSFORECAST_AVAILABLE:
         return _MODEL_NAME_NUMPY
-    sl = season_length if season_length is not None else _DEFAULT_SEASON_LENGTH[frequency]
+    sl = (
+        season_length
+        if season_length is not None
+        else _DEFAULT_SEASON_LENGTH[frequency]
+    )
     if len(history) >= 2 * sl:
         return _MODEL_NAME_STATSFORECAST  # AutoETS
     return _BASELINE_NAME  # SeasonalNaive used as primary fallback on short series
@@ -91,8 +95,13 @@ except Exception as exc:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 
-def _date_range(start: date, steps: int, frequency: str) -> list[date]:
-    """Generate a list of future dates starting the day/week after *start*."""
+def date_range(start: date, steps: int, frequency: str) -> list[date]:
+    """Generate a list of future dates starting the day/week after *start*.
+
+    Public (not `_date_range`): reused by `ml_engine.py` and `service.py` so
+    the future-date stepping logic isn't duplicated across the forecasting
+    package.
+    """
     delta = timedelta(days=1) if frequency == "D" else timedelta(weeks=1)
     return [start + delta * (i + 1) for i in range(steps)]
 
@@ -149,7 +158,7 @@ if _STATSFORECAST_AVAILABLE:
             history, frequency, horizon, season_length, [primary_model]
         )
 
-        future_dates = _date_range(history[-1].ds, horizon, frequency)
+        future_dates = date_range(history[-1].ds, horizon, frequency)
 
         lo_col = f"{used_model_col}-lo-{_LEVEL}"
         hi_col = f"{used_model_col}-hi-{_LEVEL}"
@@ -179,13 +188,14 @@ if _STATSFORECAST_AVAILABLE:
 # numpy/pandas fallback engine
 # ---------------------------------------------------------------------------
 
-import math  # noqa: E402 — always available
 
 import numpy as np  # noqa: E402 — always available
 import pandas as pd  # noqa: E402 — always available (pandas bundled with statsforecast anyway)
 
 
-def _seasonal_naive_predict(values: list[float], season_length: int, horizon: int) -> list[float]:
+def _seasonal_naive_predict(
+    values: list[float], season_length: int, horizon: int
+) -> list[float]:
     """Repeat the last full season's values to fill *horizon* steps."""
     n = len(values)
     preds: list[float] = []
@@ -234,7 +244,7 @@ def _numpy_forecast(
     preds = _seasonal_naive_predict(values, season_length, horizon)
     lo, hi = _empirical_bands(residuals, preds)
 
-    future_dates = _date_range(history[-1].ds, horizon, frequency)
+    future_dates = date_range(history[-1].ds, horizon, frequency)
 
     return [
         ForecastPoint(
@@ -284,7 +294,11 @@ def run_forecast(
     Chronos-2 (or any other model) will replace the internals here while
     keeping the signature and return type unchanged so callers are unaffected.
     """
-    sl = season_length if season_length is not None else _DEFAULT_SEASON_LENGTH[frequency]
+    sl = (
+        season_length
+        if season_length is not None
+        else _DEFAULT_SEASON_LENGTH[frequency]
+    )
 
     if _STATSFORECAST_AVAILABLE:
         return _statsforecast_forecast(history, frequency, horizon, sl)
@@ -304,5 +318,9 @@ def run_seasonal_naive(
     Always uses the numpy implementation regardless of statsforecast availability
     so that the baseline is consistent in backtest comparisons.
     """
-    sl = season_length if season_length is not None else _DEFAULT_SEASON_LENGTH[frequency]
+    sl = (
+        season_length
+        if season_length is not None
+        else _DEFAULT_SEASON_LENGTH[frequency]
+    )
     return _numpy_forecast(history, frequency, horizon, sl)

@@ -11,6 +11,7 @@ from typing import ClassVar
 
 from app.forecasting import engine as _baseline
 from app.forecasting.engines.base import ForecastEngine
+from app.forecasting.features.context import ForecastContext
 from app.forecasting.schemas import ForecastPoint, HistoryPoint
 
 
@@ -37,7 +38,11 @@ class StatsforecastEngine(ForecastEngine):
         frequency: str,
         horizon: int,
         season_length: int | None,
+        context: ForecastContext | None = None,
     ) -> list[ForecastPoint]:
+        # Context (calendar/weather) is not consumed by this engine — AutoETS
+        # doesn't take exogenous regressors in this increment. Accepted here
+        # only to satisfy the shared ForecastEngine contract.
         self._model_used = _baseline.resolve_model_name(
             history, frequency, season_length
         )

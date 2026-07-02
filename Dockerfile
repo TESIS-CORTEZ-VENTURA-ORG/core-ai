@@ -8,6 +8,13 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# LightGBM's compiled wheel dynamically links libgomp (OpenMP runtime), which
+# python:slim/bookworm-slim base images don't ship by default — without it,
+# `import lightgbm` fails at runtime with "libgomp.so.1: cannot open shared
+# object file" (HU-08-07 "ml" engine, app/forecasting/engines/ml_engine.py).
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Capa de dependencias (cacheable): se resuelve antes de copiar el código fuente.
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-install-project --no-dev
